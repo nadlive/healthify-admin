@@ -1,0 +1,45 @@
+version: 0.2
+
+env:
+  variables:
+    IMAGE_TAG: "prod-latest"
+
+phases:
+  pre_build:
+    commands:
+      - echo Checking if admin source changed
+      - LAST_BUILT=$(aws ssm get-parameter --name "$LAST_BUILT_PARAM" --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+      - if [ "$LAST_BUILT" = "$CODEBUILD_RESOLVED_SOURCE_VERSION" ]; then echo "No admin changes. Skipping build."; echo "true" > skip-deploy.txt; echo "[{\"name\":\"admin\",\"imageUri\":\"$ECR_REPOSITORY_URI:$IMAGE_TAG\"}]" > imagedefinitions.json; exit 0; fi
+      - echo Fetching admin env vars from SSM
+      - |
+        ADMIN_ENV_FILE="admin-build.env"
+        rm -f "$ADMIN_ENV_FILE"
+        NEXT_PUBLIC_API_URL=$(aws ssm get-parameter --name "/admin/NEXT_PUBLIC_API_URL" --query 'Parameter.Value' --output text)
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name "/admin/NEXT_PUBLIC_GOOGLE_CLIENT_ID" --query 'Parameter.Value' --output text)
+        printf 'NEXT_PUBLIC_API_URL=%s\n' "$NEXT_PUBLIC_API_URL" >> "$ADMIN_ENV_FILE"
+        printf 'NEXT_PUBLIC_GOOGLE_CLIENT_ID=%s\n' "$NEXT_PUBLIC_GOOGLE_CLIENT_ID" >> "$ADMIN_ENV_FILE"
+        echo "Wrote 2 params to $ADMIN_ENV_FILE"
+      - echo Logging in to Amazon ECR
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY_URI
+      - echo Building PROD Docker image
+  build:
+    commands:
+      - echo Building the Docker image for PROD
+      - docker build -f Dockerfile -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $ECR_REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Pushing the Docker image to PROD ECR
+      - docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
+      - echo Creating imagedefinitions.json
+      - echo "[{\"name\":\"admin\",\"imageUri\":\"$ECR_REPOSITORY_URI:$IMAGE_TAG\"}]" > imagedefinitions.json
+      - cat imagedefinitions.json
+      - aws ssm put-parameter --name "$LAST_BUILT_PARAM" --value "$CODEBUILD_RESOLVED_SOURCE_VERSION" --type String --overwrite
+      - echo "Triggering ECS deployment (force new deployment)"
+      - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --force-new-deployment
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - skip-deploy.txt
+  base-directory: $CODEBUILD_SRC_DIR

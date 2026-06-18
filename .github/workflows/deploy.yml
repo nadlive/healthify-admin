@@ -1,0 +1,157 @@
+name: Deploy Admin Portal
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  id-token: write # Required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Bootstrap - Get OIDC Role ARN from Parameter Store
+        id: bootstrap
+        run: |
+          # Fetch config from Parameter Store using bootstrap credentials
+          CONFIG=$(aws ssm get-parameter \
+            --name /healthify/dev/config_v1 \
+            --query Parameter.Value \
+            --output text \
+            --region ${{ secrets.AWS_REGION }})
+
+          # Extract and save OIDC Role ARN for next step
+          ROLE_ARN=$(echo "$CONFIG" | jq -r '.github.actionsRoleArn')
+          echo "ROLE_ARN=$ROLE_ARN" >> $GITHUB_ENV
+          echo "✅ Retrieved Role ARN: $ROLE_ARN"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_FOR_GITHUB }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_FOR_GITHUB }}
+
+      - name: Login to AWS via OIDC (Full Permissions)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-session-name: GitHubActionsDeploy
+
+      - name: Get Configuration from Parameter Store
+        id: get-config
+        run: |
+          # Fetch all deployment configuration from Parameter Store
+          CONFIG=$(aws ssm get-parameter --name /healthify/dev/config_v1 --query Parameter.Value --output text)
+
+          # Parse and export configuration values
+          export AWS_REGION=$(echo "$CONFIG" | jq -r '.region')
+          export EC2_HOST=$(echo "$CONFIG" | jq -r '.ec2.host')
+          export EC2_DNS=$(echo "$CONFIG" | jq -r '.ec2.dns // .ec2.host')
+          export EC2_INSTANCE_ID=$(echo "$CONFIG" | jq -r '.ec2.instanceId')
+          export EC2_USERNAME=$(echo "$CONFIG" | jq -r '.ec2.username')
+          export ECR_REPOSITORY_URL=$(echo "$CONFIG" | jq -r '.ecr.devRepositoryUrl')
+
+          # Save to GitHub environment for subsequent steps
+          echo "AWS_REGION=$AWS_REGION" >> $GITHUB_ENV
+          echo "EC2_HOST=$EC2_HOST" >> $GITHUB_ENV
+          echo "EC2_DNS=$EC2_DNS" >> $GITHUB_ENV
+          echo "EC2_INSTANCE_ID=$EC2_INSTANCE_ID" >> $GITHUB_ENV
+          echo "EC2_USERNAME=$EC2_USERNAME" >> $GITHUB_ENV
+          echo "ECR_REPOSITORY_URL=$ECR_REPOSITORY_URL" >> $GITHUB_ENV
+
+          echo "✅ Configuration loaded: Region=$AWS_REGION, Instance=$EC2_INSTANCE_ID"
+          echo "📦 ECR Repository: $ECR_REPOSITORY_URL"
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" \
+            --build-arg NEXT_PUBLIC_API_URL="${{ secrets.NEXT_PUBLIC_API_URL }}" \
+            -t healthyfy-admin:latest .
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and Push to ECR
+        run: |
+          ECR_REPOSITORY=${{ env.ECR_REPOSITORY_URL }}
+          docker tag healthyfy-admin:latest $ECR_REPOSITORY:admin
+          docker push $ECR_REPOSITORY:admin
+
+      - name: Deploy to EC2 via SSM
+        run: |
+          ECR_REPOSITORY=${{ env.ECR_REPOSITORY_URL }}
+          AWS_REGION=${{ env.AWS_REGION }}
+          EC2_INSTANCE_ID=${{ env.EC2_INSTANCE_ID }}
+
+          # Build SSM command using jq for proper JSON escaping
+          SSM_PARAMS=$(jq -n \
+            --arg region "$AWS_REGION" \
+            --arg repo "$ECR_REPOSITORY" \
+            --arg google_id "${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" \
+            --arg api_url "${{ secrets.NEXT_PUBLIC_API_URL }}" \
+            '{
+              "commands": [
+                "aws ecr get-login-password --region \($region) | docker login --username AWS --password-stdin \($repo)",
+                "docker stop healthyfy-admin || true",
+                "docker rm healthyfy-admin || true",
+                "docker rmi \($repo):admin || true",
+                "docker pull \($repo):admin",
+                "CONTAINER_ON_PORT=$(docker ps --filter \"publish=8083\" --format \"{{.ID}}\" | head -n 1)",
+                "if [ ! -z \"$CONTAINER_ON_PORT\" ]; then docker stop $CONTAINER_ON_PORT || true; docker rm $CONTAINER_ON_PORT || true; fi",
+                "docker run -d -p 8083:8082 --restart unless-stopped --name healthyfy-admin -e NEXT_PUBLIC_GOOGLE_CLIENT_ID=\"\($google_id)\" -e NEXT_PUBLIC_API_URL=\"\($api_url)\" \($repo):admin",
+                "docker image prune -f"
+              ]
+            }')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids $EC2_INSTANCE_ID \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$SSM_PARAMS" \
+            --output text \
+            --query 'Command.CommandId')
+
+          # Wait for deployment to complete
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$EC2_INSTANCE_ID" || true
+
+          # Check deployment status
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query 'Status' \
+            --output text)
+
+          OUTPUT=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query 'StandardOutputContent' \
+            --output text)
+
+          ERROR_OUTPUT=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query 'StandardErrorContent' \
+            --output text)
+
+          echo "=== Command Status: $STATUS ==="
+          echo ""
+          echo "=== Standard Output ==="
+          echo "$OUTPUT"
+          echo ""
+          echo "=== Standard Error ==="
+          echo "$ERROR_OUTPUT"
+          echo ""
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "❌ Deployment failed with status: $STATUS"
+            exit 1
+          fi
+
+          echo "✅ Deployment successful!"
