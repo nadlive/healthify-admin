@@ -4,6 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@/app/lib/apiClient';
 import { toast } from 'react-toastify';
+import {
+  createEmptyLocalizedNames,
+  type LocalizedName,
+} from '../localizedNames';
 
 type License = {
   number: string;
@@ -29,10 +33,8 @@ type Speciality = {
 
 type PractitionerFormData = {
   demographics: {
-    firstName: string;
-    lastName: string;
+    names: LocalizedName[];
     middleName?: string;
-    prefix?: string;
     suffix?: string;
     age?: number | null;
     gender: 'male' | 'female' | 'other' | '-';
@@ -69,10 +71,8 @@ export const useAddPractitioner = () => {
 
   const [formData, setFormData] = useState<Partial<PractitionerFormData>>({
     demographics: {
-      firstName: '',
-      lastName: '',
+      names: createEmptyLocalizedNames(),
       middleName: '',
-      prefix: '',
       suffix: '',
       age: null,
       gender: '-',
@@ -166,26 +166,42 @@ export const useAddPractitioner = () => {
     }));
   };
 
+  const updateLocalizedName = (
+    index: number,
+    field: 'prefix' | 'firstName' | 'lastName',
+    value: string,
+  ) => {
+    setFormData((prev) => {
+      const names = [
+        ...(prev.demographics?.names || createEmptyLocalizedNames()),
+      ];
+      names[index] = { ...names[index], [field]: value };
+      return {
+        ...prev,
+        demographics: {
+          ...prev.demographics!,
+          names,
+        },
+      };
+    });
+  };
+
   const transformFormDataForBackend = (data: Partial<PractitionerFormData>) => {
+    const names = data.demographics?.names || createEmptyLocalizedNames();
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const transformed: any = {
-      // Demographics - flat at root
-      firstName: data.demographics?.firstName || '',
-      lastName: data.demographics?.lastName || '',
-      prefix: data.demographics?.prefix || '',
+      names,
       gender:
         data.demographics?.gender === '-'
           ? ''
           : data.demographics?.gender || '',
-      fee: data.demographics?.fee || 0, 
-      // Contact Details - flat at root
+      fee: data.demographics?.fee || 0,
       email: data.contactDetails?.email || '',
       phone: data.contactDetails?.phone || '',
-
       doctorDetails: {
         specialities: data.doctorDetails?.specialities || [],
       },
-      // Licenses as JSON array
       licenses: data.licenses || [],
       isActive: data.isActive ?? true,
     };
@@ -243,6 +259,7 @@ export const useAddPractitioner = () => {
       addLicense,
       removeLicense,
       updateLicense,
+      updateLocalizedName,
       handleSpecialityChange,
     },
   };

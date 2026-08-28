@@ -6,6 +6,8 @@ import { Select } from '@/app/components/Select';
 import { Input } from '@/app/components/Input';
 import { useEditPractitioner } from './useEditPractitioner';
 import { ToastContainer } from 'react-toastify';
+import { LocalizedNameFields } from '../LocalizedNameFields';
+import { createEmptyLocalizedNames } from '../localizedNames';
 
 export default function EditPractitionerPage() {
   const {
@@ -17,6 +19,7 @@ export default function EditPractitionerPage() {
       addLicense,
       removeLicense,
       updateLicense,
+      updateLocalizedName,
       handleSpecialityChange,
     },
   } = useEditPractitioner();
@@ -64,38 +67,12 @@ export default function EditPractitionerPage() {
               </label>
             </div>
 
-            <Input
-              id="prefix"
-              type="text"
-              label="Prefix (e.g., Dr, Prof, Mr, Mrs)"
-              value={formData.demographics?.prefix || ''}
-              onChange={(e) =>
-                handleInputChange('demographics.prefix', e.target.value)
+            <LocalizedNameFields
+              names={
+                formData.demographics?.names || createEmptyLocalizedNames()
               }
+              onChange={updateLocalizedName}
             />
-
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                id="firstName"
-                type="text"
-                label="First Name *"
-                required
-                value={formData.demographics?.firstName || ''}
-                onChange={(e) =>
-                  handleInputChange('demographics.firstName', e.target.value)
-                }
-              />
-              <Input
-                id="lastName"
-                type="text"
-                label="Last Name *"
-                required
-                value={formData.demographics?.lastName || ''}
-                onChange={(e) =>
-                  handleInputChange('demographics.lastName', e.target.value)
-                }
-              />
-            </div>
 
             <Select
               id="gender"
@@ -184,7 +161,6 @@ export default function EditPractitionerPage() {
               )}
             </div>
 
-            
             <div>
               <Input
                 id="fee"
@@ -196,7 +172,6 @@ export default function EditPractitionerPage() {
                 }
               />
             </div>
-
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">

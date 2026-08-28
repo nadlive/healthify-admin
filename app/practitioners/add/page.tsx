@@ -6,6 +6,8 @@ import { Select } from '@/app/components/Select';
 import { Input } from '@/app/components/Input';
 import { ToastContainer } from 'react-toastify';
 import { useAddPractitioner } from './useAddPractitioner';
+import { LocalizedNameFields } from '../LocalizedNameFields';
+import { createEmptyLocalizedNames } from '../localizedNames';
 
 export default function AddPractitionerPage() {
   const {
@@ -17,6 +19,7 @@ export default function AddPractitionerPage() {
       addLicense,
       removeLicense,
       updateLicense,
+      updateLocalizedName,
       handleSpecialityChange,
     },
   } = useAddPractitioner();
@@ -50,38 +53,12 @@ export default function AddPractitionerPage() {
               </label>
             </div>
 
-            <Input
-              id="prefix"
-              type="text"
-              label="Prefix (e.g., Dr, Prof, Mr, Mrs)"
-              value={formData.demographics?.prefix || ''}
-              onChange={(e) =>
-                handleInputChange('demographics.prefix', e.target.value)
+            <LocalizedNameFields
+              names={
+                formData.demographics?.names || createEmptyLocalizedNames()
               }
+              onChange={updateLocalizedName}
             />
-
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                id="firstName"
-                type="text"
-                label="First Name *"
-                required
-                value={formData.demographics?.firstName || ''}
-                onChange={(e) =>
-                  handleInputChange('demographics.firstName', e.target.value)
-                }
-              />
-              <Input
-                id="lastName"
-                type="text"
-                label="Last Name *"
-                required
-                value={formData.demographics?.lastName || ''}
-                onChange={(e) =>
-                  handleInputChange('demographics.lastName', e.target.value)
-                }
-              />
-            </div>
 
             <Select
               id="gender"
@@ -91,7 +68,7 @@ export default function AddPractitionerPage() {
               onChange={(e) =>
                 handleInputChange(
                   'demographics.gender',
-                  e.target.value as 'male' | 'female' | 'other' | '-'
+                  e.target.value as 'male' | 'female' | 'other' | '-',
                 )
               }
               options={[
@@ -136,7 +113,7 @@ export default function AddPractitionerPage() {
                   specialities.map((speciality) => {
                     const isSelected =
                       formData.doctorDetails?.specialities?.includes(
-                        speciality.id
+                        speciality.id,
                       ) || false;
                     return (
                       <label
@@ -149,7 +126,7 @@ export default function AddPractitionerPage() {
                           onChange={(e) =>
                             handleSpecialityChange(
                               speciality.id,
-                              e.target.checked
+                              e.target.checked,
                             )
                           }
                           className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-slate-300 rounded"

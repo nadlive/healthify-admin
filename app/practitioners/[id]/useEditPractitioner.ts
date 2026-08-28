@@ -5,6 +5,11 @@ import { useRouter, useParams } from 'next/navigation';
 import { useMutation, useQuery } from '@/app/lib/apiClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
+import {
+  createEmptyLocalizedNames,
+  normalizeLocalizedNames,
+  type LocalizedName,
+} from '../localizedNames';
 
 type License = {
   number: string;
@@ -22,9 +27,7 @@ type Speciality = {
 
 type PractitionerFormData = {
   demographics: {
-    firstName: string;
-    lastName: string;
-    prefix?: string;
+    names: LocalizedName[];
     gender: 'male' | 'female' | 'other' | '-';
     fee?: number | null;
   };
@@ -35,7 +38,6 @@ type PractitionerFormData = {
   doctorDetails?: DoctorDetails | null;
   licenses: License[];
   isActive?: boolean;
-  
 };
 
 export const useEditPractitioner = () => {
@@ -68,9 +70,7 @@ export const useEditPractitioner = () => {
 
   const [formData, setFormData] = useState<Partial<PractitionerFormData>>({
     demographics: {
-      firstName: '',
-      lastName: '',
-      prefix: '',
+      names: createEmptyLocalizedNames(),
       gender: '-',
       fee: null,
     },
@@ -125,11 +125,9 @@ export const useEditPractitioner = () => {
 
       setFormData({
         demographics: {
-          firstName: data.firstName || '',
-          lastName: data.lastName || '',
-          prefix: data.prefix || '',
+          names: normalizeLocalizedNames(data),
           gender: data.gender || '-',
-          fee: data.fee || ''
+          fee: data.fee || '',
         },
         contactDetails: {
           email: data.email || '',
@@ -212,12 +210,30 @@ export const useEditPractitioner = () => {
     }));
   };
 
+  const updateLocalizedName = (
+    index: number,
+    field: 'prefix' | 'firstName' | 'lastName',
+    value: string,
+  ) => {
+    setFormData((prev) => {
+      const names = [
+        ...(prev.demographics?.names || createEmptyLocalizedNames()),
+      ];
+      names[index] = { ...names[index], [field]: value };
+      return {
+        ...prev,
+        demographics: {
+          ...prev.demographics!,
+          names,
+        },
+      };
+    });
+  };
+
   const transformFormDataForBackend = (data: Partial<PractitionerFormData>) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const transformed: any = {
-      firstName: data.demographics?.firstName || '',
-      lastName: data.demographics?.lastName || '',
-      prefix: data.demographics?.prefix || '',
+      names: data.demographics?.names || createEmptyLocalizedNames(),
       gender:
         data.demographics?.gender === '-'
           ? ''
@@ -299,6 +315,7 @@ export const useEditPractitioner = () => {
       addLicense,
       removeLicense,
       updateLicense,
+      updateLocalizedName,
       handleSpecialityChange,
     },
   };
