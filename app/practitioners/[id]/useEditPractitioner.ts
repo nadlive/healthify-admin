@@ -9,6 +9,7 @@ import {
   createEmptyLocalizedNames,
   normalizeLocalizedNames,
   type LocalizedName,
+  type Speciality,
 } from '../localizedNames';
 
 type License = {
@@ -18,11 +19,6 @@ type License = {
 
 type DoctorDetails = {
   specialities?: string[];
-};
-
-type Speciality = {
-  id: string;
-  name: string;
 };
 
 type PractitionerFormData = {
@@ -118,8 +114,8 @@ export const useEditPractitioner = () => {
         // Fallback to doctorDetails.specialities if it exists
         specialityIds = Array.isArray(data.doctorDetails.specialities)
           ? data.doctorDetails.specialities.map((spec: Speciality) =>
-              typeof spec === 'string' ? spec : spec.id,
-            )
+            typeof spec === 'string' ? spec : spec.id,
+          )
           : [];
       }
 

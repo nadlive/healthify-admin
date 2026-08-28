@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import {
   createEmptyLocalizedNames,
   type LocalizedName,
+  type Speciality,
 } from '../localizedNames';
 
 type License = {
@@ -24,11 +25,6 @@ type Address = {
 
 type DoctorDetails = {
   specialities?: string[];
-};
-
-type Speciality = {
-  id: string;
-  name: string;
 };
 
 type PractitionerFormData = {

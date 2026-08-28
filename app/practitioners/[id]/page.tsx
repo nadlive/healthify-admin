@@ -7,7 +7,11 @@ import { Input } from '@/app/components/Input';
 import { useEditPractitioner } from './useEditPractitioner';
 import { ToastContainer } from 'react-toastify';
 import { LocalizedNameFields } from '../LocalizedNameFields';
-import { createEmptyLocalizedNames } from '../localizedNames';
+import {
+  createEmptyLocalizedNames,
+  getSpecialityPrimaryLabel,
+  getSpecialitySecondaryLabels,
+} from '../localizedNames';
 
 export default function EditPractitionerPage() {
   const {
@@ -129,10 +133,12 @@ export default function EditPractitionerPage() {
                       formData.doctorDetails?.specialities?.includes(
                         speciality.id,
                       ) || false;
+                    const secondaryLabels =
+                      getSpecialitySecondaryLabels(speciality);
                     return (
                       <label
                         key={speciality.id}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-2 rounded"
+                        className="flex items-start space-x-2 cursor-pointer hover:bg-slate-50 p-2 rounded"
                       >
                         <input
                           type="checkbox"
@@ -143,10 +149,17 @@ export default function EditPractitionerPage() {
                               e.target.checked,
                             )
                           }
-                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-slate-300 rounded"
+                          className="mt-0.5 h-4 w-4 text-purple-600 focus:ring-purple-500 border-slate-300 rounded"
                         />
                         <span className="text-sm text-slate-900">
-                          {speciality.name}
+                          <span className="font-medium">
+                            {getSpecialityPrimaryLabel(speciality)}
+                          </span>
+                          {secondaryLabels.length > 0 && (
+                            <span className="block text-xs text-slate-500 mt-0.5">
+                              {secondaryLabels.join(' · ')}
+                            </span>
+                          )}
                         </span>
                       </label>
                     );
@@ -155,10 +168,10 @@ export default function EditPractitionerPage() {
               </div>
               {(!formData.doctorDetails?.specialities ||
                 formData.doctorDetails.specialities.length === 0) && (
-                <p className="mt-1 text-sm text-red-600">
-                  Please select at least one speciality
-                </p>
-              )}
+                  <p className="mt-1 text-sm text-red-600">
+                    Please select at least one speciality
+                  </p>
+                )}
             </div>
 
             <div>
