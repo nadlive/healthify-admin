@@ -38,14 +38,11 @@ export function LocalizedNameFields({
           >
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50">
               {lang.label}
-              {!isEnglish &&
-                !entry.firstName &&
-                !entry.lastName &&
-                !entry.prefix && (
-                  <span className="ml-2 text-xs font-normal text-slate-400">
-                    (optional)
-                  </span>
-                )}
+              {!isEnglish && (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  (optional)
+                </span>
+              )}
             </summary>
             <div className="space-y-4 border-t border-slate-200 px-4 py-4">
               <Input
